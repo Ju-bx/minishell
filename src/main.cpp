@@ -18,7 +18,7 @@ int main()
     {
         // child: become "ls -l"
         char cmd[] = "ls";
-        char arg1[] = "nofile";
+        char arg1[] = "-l";
         char* args[] = {cmd, arg1, nullptr};
 
         execvp(args[0], args);
