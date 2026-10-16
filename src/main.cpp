@@ -16,6 +16,11 @@ std::vector<std::string> split(const std::string& line)
     return words;
 }
 
+bool is_builtin(const std::vector<std::string>& words)
+{
+    return words[0] == "cd" || words[0] == "exit";
+}
+
 void run_command(std::vector<std::string>& words)
 {
     std::vector<char*> argv;
@@ -51,6 +56,32 @@ int main()
         std::vector<std::string> words = split(line);
         if (words.empty()) {
             continue;                    // empty line
+        }
+
+        if (words[0] == "exit") {
+            break;
+        }
+
+        if (words[0] == "cd") {
+            // TODO: 決定要去哪裡
+            //   - 有給資料夾（words 有兩個以上的字）→ 用 words[1]
+            //   - 沒給 → 用 getenv("HOME")
+            // TODO: 呼叫 chdir，失敗（回傳 -1）就 perror("cd")
+            std::string target_path;
+            if (words.size() == 1){
+                target_path = getenv("HOME");
+            }else{
+                if (words.size()>2){
+                    std::cerr << "cd: too many arguments\n";
+                    continue;
+                }else{
+                    target_path = words[1];
+                }
+            }
+            if (chdir(target_path.c_str()) == -1){//when chdir fail return -1,success return 0
+                perror("cd");
+            }
+            continue;
         }
 
         run_command(words);
