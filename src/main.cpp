@@ -4,6 +4,8 @@
 #include <vector>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <cstdlib>
+#include <cstdio>
 
 std::vector<std::string> split(const std::string& line)
 {
@@ -37,11 +39,6 @@ std::string pretty_path (const std::string& full_path)
         return full_path;
     }
     
-}
-
-bool is_builtin(const std::vector<std::string>& words)
-{
-    return words[0] == "cd" || words[0] == "exit";
 }
 
 int run_command(std::vector<std::string>& words)
@@ -80,6 +77,29 @@ std::string current_dir()
     return buf;
 }
 
+int run_cd (const std::vector<std::string> &words){
+    std::string target_path;
+    if (words.size() == 1){
+        target_path = getenv("HOME");
+    }else{
+        if (words.size()>2){
+            std::cerr << "cd: too many arguments\n";
+            return 1;
+        }else{
+            target_path = words[1];
+            if (!target_path.empty() && target_path[0] == '~') {
+                target_path = std::string(getenv("HOME")) + target_path.substr(1);
+            }
+        }
+    }
+    if (chdir(target_path.c_str()) == -1){//when chdir fail return -1,success return 0
+        perror("cd");
+        return 1;
+    }else {
+        return 0;
+    }
+}
+
 int main()
 {
     std::string line;
@@ -90,7 +110,6 @@ int main()
             std::cout << "[" << last_status << "] ";
         }
         std::cout << pretty_path(current_dir()) << "> ";
-        //std::cout << "minishell> ";
         if (!std::getline(std::cin, line)) {
             std::cout << '\n';
             break;                       // Ctrl+D
@@ -104,29 +123,8 @@ int main()
         if (words[0] == "exit") {
             break;
         }
-
         if (words[0] == "cd") {
-            std::string target_path;
-            if (words.size() == 1){
-                target_path = getenv("HOME");
-            }else{
-                if (words.size()>2){
-                    std::cerr << "cd: too many arguments\n";
-                    continue;
-                }else{
-                    target_path = words[1];
-                    if (!target_path.empty() && target_path[0] == '~') {
-                        target_path = std::string(getenv("HOME")) + target_path.substr(1);
-                    }
-                    
-                }
-            }
-            if (chdir(target_path.c_str()) == -1){//when chdir fail return -1,success return 0
-                perror("cd");
-                last_status = 1;
-            }else {
-                last_status = 0;
-            }
+            last_status = run_cd(words);
             continue;
         }
 
