@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <cstdlib>
+#include <fcntl.h>
 #include <cstdio>
 
 std::vector<std::string> split(const std::string& line)
@@ -16,6 +17,36 @@ std::vector<std::string> split(const std::string& line)
         words.push_back(word);
     }
     return words;
+}
+
+struct Command {
+    std::vector<std::string> args;
+    std::string in_file;
+    std::string out_file;
+};
+
+bool parse_command(const std::vector<std::string>& words, Command& cmd)
+{
+    for (std::size_t i = 0; i < words.size(); i++) {
+        if (words[i] == ">") {
+            if (i + 1 >= words.size()) {
+                std::cerr << "syntax error: missing file after >\n";
+                return false;
+            }
+            cmd.out_file = words[i + 1];
+            i++; // Skip the filename token
+        } else if (words[i] == "<") {
+            if (i + 1 >= words.size()) {
+                std::cerr << "syntax error: missing file after <\n";
+                return false;
+            }
+            cmd.in_file = words[i + 1];
+            i++; // Skip the filename token
+        } else {
+            cmd.args.push_back(words[i]);
+        }
+    }
+    return true;
 }
 
 std::string pretty_path (const std::string& full_path)
@@ -41,19 +72,51 @@ std::string pretty_path (const std::string& full_path)
     
 }
 
-int run_command(std::vector<std::string>& words)
+int run_command(const Command& cmd)
 {
+    if (cmd.args.empty()) {
+        return 0;
+    }
+
     std::vector<char*> argv;
-    for (std::string& w : words) {
-        argv.push_back(w.data());
+    for (const std::string& w : cmd.args) {
+        argv.push_back(const_cast<char*>(w.data()));
     }
     argv.push_back(nullptr);
 
     pid_t pid = fork();
-    if (pid < 0){
-        perror("fork fail") ;
+    if (pid < 0) {
+        perror("fork fail");
         return 1;
-    }else if (pid == 0){
+    } else if (pid == 0) {
+        // Handle input redirection (<)
+        if (!cmd.in_file.empty()) {
+            int fd_in = open(cmd.in_file.c_str(), O_RDONLY);
+            if (fd_in < 0) {
+                perror("open input file");
+                _exit(1);
+            }
+            if (dup2(fd_in, STDIN_FILENO) < 0) {
+                perror("dup2 input");
+                _exit(1);
+            }
+            close(fd_in);
+        }
+
+        // Handle output redirection (>)
+        if (!cmd.out_file.empty()) {
+            int fd_out = open(cmd.out_file.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd_out < 0) {
+                perror("open output file");
+                _exit(1);
+            }
+            if (dup2(fd_out, STDOUT_FILENO) < 0) {
+                perror("dup2 output");
+                _exit(1);
+            }
+            close(fd_out);
+        }
+
         execvp(argv[0], argv.data());
         std::cerr << argv[0] << ": command not found\n";
         _exit(127);
@@ -61,10 +124,10 @@ int run_command(std::vector<std::string>& words)
         int status = 0;
         waitpid(pid, &status, 0);
         if (WIFEXITED(status)) {
-            return WEXITSTATUS(status);        // 正常結束：回傳它的 exit code
+            return WEXITSTATUS(status);
         }
-        return 128 + WTERMSIG(status);         // 被 signal 殺掉（例如 Ctrl+C）
-            }
+        return 128 + WTERMSIG(status);
+    }
 }
 
 std::string current_dir()
@@ -128,7 +191,17 @@ int main()
             continue;
         }
 
-        last_status = run_command(words);
+        Command cmd;
+        if (!parse_command(words, cmd)) {
+            last_status = 1;
+            continue;
+        }
+
+        if (cmd.args.empty()) {
+            continue;
+        }
+
+        last_status = run_command(cmd);
         
     }
     return 0;
