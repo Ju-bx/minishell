@@ -231,7 +231,6 @@ int main()
 
         std::size_t pipe_pos = words.size();          
         for (std::size_t i = 0; i < words.size(); i++) {
-            // TODO: 如果 words[i] 是 "|"，記下位置，break
             if (words[i] == "|"){
                 pipe_pos = i;
                 break;
